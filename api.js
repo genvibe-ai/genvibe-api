@@ -104,7 +104,7 @@ async function loadCookiesFromDB() {
 }
 
 // Load cookies from database (async initialization)
-(async () => {
+const cookiesLoaded = (async () => {
   CONFIG.cookies = await loadCookiesFromDB();
   
   if (CONFIG.cookies.length === 0) {
@@ -133,6 +133,7 @@ async function loadCookiesFromDB() {
     });
   }
   initializeCookieStats(); // Initialize stats after cookies are loaded
+  return true;
 })();
 
 // Cookie cache timestamp - reload every 5 seconds to pick up DB changes
@@ -3380,54 +3381,47 @@ app.use((req, res) => {
 console.log(`\n🛡️  Cloudflare Bypass: Ready (on-demand activation)`);
 console.log(`   Will automatically solve challenges when 403 detected`);
 
+// ==================== START SERVER ====================
+// Wait for cookies to load before starting server
+await cookiesLoaded;
+
 const server = app.listen(CONFIG.port, async () => {
-  console.log(`
-╔════════════════════════════════════════════════════════════╗
-║   LM Arena API - Multi-Region Load Distribution 🌍       ║
-╚════════════════════════════════════════════════════════════╝
+  console.log(`\n╔════════════════════════════════════════════════════════════╗`);
+  console.log(`║   LM Arena API - Multi-Region Load Distribution 🌍       ║`);
+  console.log(`╚════════════════════════════════════════════════════════════╝`);
+  console.log(`🚀 Server: http://localhost:${CONFIG.port}`);
+  console.log(`🌍 Active Regions: ${CONFIG.cookies.filter((c) => c.active).length}`);
+  console.log(`Regions: ${CONFIG.cookies.map((c) => c.region).join(', ') || 'None'}\n`);
 
-🚀 Server: http://localhost:${CONFIG.port}
-🌍 Active Regions: ${CONFIG.cookies.filter((c) => c.cookie.length > 0).length}
+  console.log(`Load Distribution Strategy:`);
+  console.log(`✅ Round-robin (default)`);
+  console.log(`✅ Load-balanced selection`);
+  console.log(`✅ Success-rate based routing`);
+  console.log(`✅ Auto-failover on errors`);
+  console.log(`✅ Response time tracking\n`);
 
-Regions:
-${CONFIG.cookies
-  .filter((c) => c.cookie.length > 0)
-  .map((c) => `   ✅ ${c.region}`)
-  .join('\n')}
+  console.log(`Features:`);
+  console.log(`✅ Multi-region cookie rotation`);
+  console.log(`✅ Balanced compression`);
+  console.log(`✅ Automatic error recovery`);
+  console.log(`✅ Per-region statistics`);
+  console.log(`✅ Load monitoring`);
+  console.log(`✅ Global rate limiting`);
+  console.log(`✅ Fallback to direct connections\n`);
 
-Load Distribution Strategy:
-✅ Round-robin (default)
-✅ Load-balanced selection
-✅ Success-rate based routing
-✅ Auto-failover on errors
-✅ Response time tracking
+  console.log(`Endpoints:`);
+  console.log(`📡 POST /v1/chat/completions`);
+  console.log(`📊 GET  /stats/cookies (view all stats)`);
+  console.log(`🏥 GET  /health`);
+  console.log(`🐛 GET  /debug/400-errors\n`);
 
-Features:
-✅ Multi-region cookie rotation
-✅ Balanced compression
-✅ Automatic error recovery
-✅ Per-region statistics
-✅ Load monitoring
-✅ Global rate limiting
-✅ Fallback to direct connections
-
-Endpoints:
-📡 POST /v1/chat/completions
-📊 GET  /stats/cookies (view all stats)
-🏥 GET  /health
-🐛 GET  /debug/400-errors
-
-Setup:
-export COOKIE_SG="your_singapore_cookie"
-export COOKIE_US="your_us_cookie"
-export COOKIE_EU="your_eu_cookie"
-export COOKIE_JP="your_japan_cookie"
-  `);
-
-  // ═══ CLOUDFLARE BYPASS DISABLED - commented out at line 192 ═══
-  // initializeCloudflareBypass().catch((err) => {
-  //   console.error("Failed to initialize Cloudflare bypass:", err.message);
-  // });
+  if (CONFIG.cookies.length === 0) {
+    console.log(`Setup:`);
+    console.log(`export COOKIE_SG="your_singapore_cookie"`);
+    console.log(`export COOKIE_US="your_us_cookie"`);
+    console.log(`export COOKIE_EU="your_eu_cookie"`);
+    console.log(`export COOKIE_JP="your_japan_cookie"\n`);
+  }
 });
 
 // Note: Automatic cookie health monitor removed - manage cookies manually via dashboard
