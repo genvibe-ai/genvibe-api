@@ -1,0 +1,22 @@
+# node_modules/
+dashboard/node_modules/
+dashboard-dist/
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# Environment variables
+.env
+
+# Logs
+*.log
+
+# System files
+.DS_Store
+.claude/
+.npm-cache/
+
+# Backups
+*-backup*

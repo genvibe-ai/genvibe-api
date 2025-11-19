@@ -1,0 +1,26 @@
+{
+  "type": "module",
+  "dependencies": {
+    "axios": "^1.13.2",
+    "better-sqlite3": "^12.4.1",
+    "chart.js": "^4.5.1",
+    "ctx-zip": "^0.0.9",
+    "express": "^5.1.0",
+    "http-proxy-agent": "^7.0.2",
+    "https-proxy-agent": "^7.0.6",
+    "p-queue": "^9.0.0",
+    "puppeteer": "^24.28.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "socket.io": "^4.8.1",
+    "socks": "^2.8.7",
+    "socks-proxy-agent": "^8.0.5",
+    "uuid": "^13.0.0",
+    "uuidv7": "^1.0.2",
+    "ws": "^8.18.3"
+  },
+  "scripts": {
+    "start": "node api.js",
+    "start:api": "node api.js"
+  }
+}
