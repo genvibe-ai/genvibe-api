@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: genvibe-api
+    env: node
+    plan: free
+    buildCommand: npm install && cd dashboard && npm install && npm run build && cd ..
+    startCommand: node api.js
+    healthCheckPath: /dashboard
+    envVars:
+      - key: NODE_VERSION
+        value: 18.17.0
+      - key: PORT
+        generateValue: true
