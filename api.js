@@ -82,9 +82,9 @@ const CONFIG = {
 };
 
 // ==================== LOAD COOKIES FROM DATABASE ====================
-function loadCookiesFromDB() {
+async function loadCookiesFromDB() {
   try {
-    const dbCookies = cookieDB.getActive();
+    const dbCookies = await cookieDB.getActive();
     console.log(`📥 Loading ${dbCookies.length} active cookies from database...`);
 
     return dbCookies.map((c) => ({
@@ -103,38 +103,41 @@ function loadCookiesFromDB() {
   }
 }
 
-// Load cookies from database
-CONFIG.cookies = loadCookiesFromDB();
+// Load cookies from database (async initialization)
+(async () => {
+  CONFIG.cookies = await loadCookiesFromDB();
+  
+  if (CONFIG.cookies.length === 0) {
+    console.warn(
+      `⚠️  No cookies found in database! Please add cookies via dashboard at http://localhost:${CONFIG.port}/dashboard`,
+    );
+  } else {
+    console.log(`✅ Loaded ${CONFIG.cookies.length} cookies from database`);
+    CONFIG.cookies.forEach((c) => {
+      console.log(`   - ${c.region}: ${c.requestCount} requests, ${c.successRate.toFixed(1)}% success`);
+    });
+    CONFIG.cookies.forEach((c) => {
+      try {
+        const names = String(c.cookie)
+          .split(';')
+          .map((p) => p.trim().split('=')[0].toLowerCase());
+        const hasClearance = names.includes('cf_clearance');
+        const hasBm = names.includes('__cf_bm');
+        const hasAuth = names.some((n) => n.includes('arena-auth'));
+        console.log(
+          `   ↳ ${c.region} cookie components: cf_clearance=${hasClearance ? '✓' : '✗'}, __cf_bm=${
+            hasBm ? '✓' : '✗'
+          }, arena-auth=${hasAuth ? '✓' : '✗'}`,
+        );
+      } catch {}
+    });
+  }
+  initializeCookieStats(); // Initialize stats after cookies are loaded
+})();
 
 // Cookie cache timestamp - reload every 5 seconds to pick up DB changes
 let cookiesLastLoaded = Date.now();
 const COOKIE_RELOAD_INTERVAL = 5000; // 5 seconds
-
-if (CONFIG.cookies.length === 0) {
-  console.warn(
-    `⚠️  No cookies found in database! Please add cookies via dashboard at http://localhost:${CONFIG.port}/dashboard`,
-  );
-} else {
-  console.log(`✅ Loaded ${CONFIG.cookies.length} cookies from database`);
-  CONFIG.cookies.forEach((c) => {
-    console.log(`   - ${c.region}: ${c.requestCount} requests, ${c.successRate.toFixed(1)}% success`);
-  });
-  CONFIG.cookies.forEach((c) => {
-    try {
-      const names = String(c.cookie)
-        .split(';')
-        .map((p) => p.trim().split('=')[0].toLowerCase());
-      const hasClearance = names.includes('cf_clearance');
-      const hasBm = names.includes('__cf_bm');
-      const hasAuth = names.some((n) => n.includes('arena-auth'));
-      console.log(
-        `   ↳ ${c.region} cookie components: cf_clearance=${hasClearance ? '✓' : '✗'}, __cf_bm=${
-          hasBm ? '✓' : '✗'
-        }, arena-auth=${hasAuth ? '✓' : '✗'}`,
-      );
-    } catch {}
-  });
-}
 
 // Cookie stats
 let cookieStats = {};
@@ -487,12 +490,12 @@ const inFlightCookies = new Set(); // Cookie regions currently streaming
 const inFlightIPCounts = new Map(); // IP -> count of concurrent requests
 const MAX_REQUESTS_PER_IP = 10; // Conservative limit (tested: 15-16 fails, so use 10 for safety)
 
-function selectCookie(strategy = 'round-robin', excludeRegion = null) {
+async function selectCookie(strategy = 'round-robin', excludeRegion = null) {
   // Reload cookies from database if cache is stale (every 5 seconds)
   // This ensures we pick up deleted/added/updated cookies without restarting
   const now = Date.now();
   if (now - cookiesLastLoaded > COOKIE_RELOAD_INTERVAL) {
-    CONFIG.cookies = loadCookiesFromDB();
+    CONFIG.cookies = await loadCookiesFromDB();
     cookiesLastLoaded = now;
   }
 
@@ -2370,7 +2373,7 @@ async function askLMArenaStreaming(
 
 async function askLMArena(modelId, message, retryCount = 0, isIterationRequest = false, attachments = []) {
   // Select cookie for request
-  const selectedCookie = selectCookie('round-robin');
+  const selectedCookie = await selectCookie('round-robin');
 
   // Adaptive pacer pre-flight for non-streaming, region-scoped
   if (typeof RATE_PACER !== 'undefined' && RATE_PACER.awaitPermit) {
