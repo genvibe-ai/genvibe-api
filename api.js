@@ -1212,9 +1212,9 @@ async function askLMArenaStreaming(
   let selectedCookie;
   try {
     if (retryCount > 0) {
-      selectedCookie = selectCookie('load-balanced', lastCookieRegion || null);
+      selectedCookie = await selectCookie('load-balanced', lastCookieRegion || null);
     } else {
-      selectedCookie = selectCookie('round-robin', null);
+      selectedCookie = await selectCookie('round-robin', null);
     }
   } catch (selErr) {
     const msg = String(selErr?.message || '').toLowerCase();
@@ -1231,7 +1231,7 @@ async function askLMArenaStreaming(
         if (anyFree) break;
       }
       // Try selection again (do not exclude region on first attempt)
-      selectedCookie = selectCookie(retryCount > 0 ? 'load-balanced' : 'round-robin', lastCookieRegion || null);
+      selectedCookie = await selectCookie(retryCount > 0 ? 'load-balanced' : 'round-robin', lastCookieRegion || null);
     } else {
       throw selErr;
     }
