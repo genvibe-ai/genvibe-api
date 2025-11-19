@@ -9,9 +9,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // ==================== COOKIE MANAGEMENT ====================
 
 // Get all cookies with stats
-router.get('/api/cookies', (req, res) => {
+router.get('/api/cookies', async (req, res) => {
   try {
-    const cookies = cookieDB.getStats();
+    const cookies = await cookieDB.getStats();
     res.json({ success: true, data: cookies });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -19,7 +19,7 @@ router.get('/api/cookies', (req, res) => {
 });
 
 // Add new cookie
-router.post('/api/cookies', (req, res) => {
+router.post('/api/cookies', async (req, res) => {
   try {
     const { region, cookie } = req.body;
     
@@ -30,7 +30,7 @@ router.post('/api/cookies', (req, res) => {
       });
     }
 
-    const result = cookieDB.add(region, cookie);
+    const result = await cookieDB.add(region, cookie);
     res.json({ success: true, data: result });
   } catch (error) {
     res.status(400).json({ success: false, error: error.message });
@@ -63,10 +63,10 @@ router.put('/api/cookies/:region', (req, res) => {
 });
 
 // Toggle cookie active status
-router.patch('/api/cookies/:region/toggle', (req, res) => {
+router.patch('/api/cookies/:region/toggle', async (req, res) => {
   try {
     const { region } = req.params;
-    const success = cookieDB.toggleActive(region);
+    const success = await cookieDB.toggleActive(region);
     
     if (success) {
       const cookie = cookieDB.getByRegion(region);
@@ -84,10 +84,10 @@ router.patch('/api/cookies/:region/toggle', (req, res) => {
 });
 
 // Delete cookie
-router.delete('/api/cookies/:region', (req, res) => {
+router.delete('/api/cookies/:region', async (req, res) => {
   try {
     const { region } = req.params;
-    const success = cookieDB.delete(region);
+    const success = await cookieDB.delete(region);
     
     if (success) {
       res.json({ success: true, message: `Cookie for ${region} deleted` });
@@ -100,7 +100,7 @@ router.delete('/api/cookies/:region', (req, res) => {
 });
 
 // Bulk delete cookies (for multi-select)
-router.post('/api/cookies/bulk-delete', (req, res) => {
+router.post('/api/cookies/bulk-delete', async (req, res) => {
   try {
     const { regions } = req.body;
     
@@ -113,7 +113,7 @@ router.post('/api/cookies/bulk-delete', (req, res) => {
 
     let deleted = 0;
     for (const region of regions) {
-      if (cookieDB.delete(region)) {
+      if (await cookieDB.delete(region)) {
         deleted++;
       }
     }
@@ -129,9 +129,9 @@ router.post('/api/cookies/bulk-delete', (req, res) => {
 });
 
 // Reset all stats
-router.post('/api/cookies/reset-stats', (req, res) => {
+router.post('/api/cookies/reset-stats', async (req, res) => {
   try {
-    cookieDB.resetStats();
+    await cookieDB.resetStats();
     res.json({ success: true, message: 'All stats reset' });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -141,20 +141,22 @@ router.post('/api/cookies/reset-stats', (req, res) => {
 // ==================== STATS ====================
 
 // Get dashboard summary
-router.get('/api/stats/summary', (req, res) => {
+router.get('/api/stats/summary', async (req, res) => {
   try {
-    const cookies = cookieDB.getStats();
-    const totalStats = statsDB.getTotal();
-    const recentStats = statsDB.getRecent(7);
-
+    const cookies = await cookieDB.getStats();
     const activeCookies = cookies.filter(c => c.active === 1).length;
-    const totalRequests = cookies.reduce((sum, c) => sum + c.request_count, 0);
-    const totalSuccess = cookies.reduce((sum, c) => sum + c.success_count, 0);
-    const totalErrors = cookies.reduce((sum, c) => sum + c.error_count, 0);
+    
+    const totalRequests = cookies.reduce((sum, c) => sum + (c.request_count || 0), 0);
+    const totalSuccess = cookies.reduce((sum, c) => sum + (c.success_count || 0), 0);
+    const totalErrors = cookies.reduce((sum, c) => sum + (c.error_count || 0), 0);
+    
     const avgSuccessRate = totalRequests > 0 
       ? ((totalSuccess / totalRequests) * 100).toFixed(1)
-      : 100;
+      : '100.0';
 
+    // Get recent stats (last 7 days)
+    const recentStats = await statsDB.getRecent(7);
+    
     res.json({
       success: true,
       data: {
@@ -188,10 +190,10 @@ router.get('/api/stats/summary', (req, res) => {
 });
 
 // Get health status
-router.get('/api/health', (req, res) => {
+router.get('/api/health', async (req, res) => {
   try {
-    const cookies = cookieDB.getActive();
-    const allCookies = cookieDB.getAll();
+    const cookies = await cookieDB.getActive();
+    const allCookies = await cookieDB.getAll();
     
     const healthy = cookies.filter(c => {
       if (c.request_count === 0) return true;
