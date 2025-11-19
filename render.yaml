@@ -3,7 +3,13 @@ services:
     name: genvibe-api
     env: node
     plan: free
-    buildCommand: npm install && cd dashboard && npm install && npm run build && cd ..
+    buildCommand: |
+      npm install
+      cd dashboard
+      npm install
+      npm run build
+      cd ..
+      echo "✅ Dashboard built successfully"
     startCommand: node api.js
     healthCheckPath: /dashboard
     envVars:
