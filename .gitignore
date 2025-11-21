@@ -1,17 +1,53 @@
-# node_modules/
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 dashboard/node_modules/
 # dashboard-dist/ (commented out - commit for Render)
+
+# Environment files
+.env
+.env.local
+.env.production
 
 # Database files
 *.db
 *.db-shm
 *.db-wal
+*.db.backup.*
+data/cookies.db.backup.*
 
-# Environment variables
-.env
+# Deployment files (created locally, not needed in repo)
+*.tar.gz
+deploy-*.sh
+quick-deploy-oracle.sh
+Dockerfile
+docker-compose.yml
+migrate-*.js
+migrate-*.mjs
+DEPLOY_NOW.md
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
 # Logs
+logs/
 *.log
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
 
 # System files
 .DS_Store
