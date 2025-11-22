@@ -1,3 +1,6 @@
+// Load environment variables from .env file
+import 'dotenv/config';
+
 import express from 'express';
 import axios from 'axios';
 import { uuidv7 } from 'uuidv7';
@@ -80,6 +83,23 @@ const CONFIG = {
     },
   },
 };
+
+// ==================== AWS PROXY CONFIGURATION ====================
+// AWS API Gateway URL for IP rotation (optional)
+// If set, all requests to lmarena.ai will be proxied through AWS Lambda
+// This provides different IPs for each request, avoiding rate limits
+// IMPORTANT: Your AWS API Gateway MUST be configured with a Lambda function
+// that forwards requests to lmarena.ai (see aws_proxy_setup.md for details)
+const AWS_PROXY_URL = process.env.AWS_PROXY_URL || null;
+
+if (AWS_PROXY_URL) {
+  console.log(`\n🌐 AWS Proxy Rotation ENABLED`);
+  console.log(`   Proxy URL: ${AWS_PROXY_URL}`);
+  console.log(`   All LMArena requests will be routed through AWS for IP rotation\n`);
+} else {
+  console.log(`\n📡 Direct Connection Mode`);
+  console.log(`   Requests will be made directly to lmarena.ai from server IP\n`);
+}
 
 // ==================== LOAD COOKIES FROM DATABASE ====================
 async function loadCookiesFromDB() {
@@ -491,7 +511,46 @@ const inFlightCookies = new Set(); // Cookie regions currently streaming
 const inFlightIPCounts = new Map(); // IP -> count of concurrent requests
 const MAX_REQUESTS_PER_IP = 10; // Conservative limit (tested: 15-16 fails, so use 10 for safety)
 
+// ═══════════════════════════════════════════════════════════
+// MUTEX LOCK for Cookie Selection (Thread-Safe)
+// ═══════════════════════════════════════════════════════════
+class AsyncLock {
+  constructor() {
+    this.queue = [];
+    this.locked = false;
+  }
+
+  async acquire() {
+    return new Promise((resolve) => {
+      if (!this.locked) {
+        this.locked = true;
+        resolve();
+      } else {
+        this.queue.push(resolve);
+      }
+    });
+  }
+
+  release() {
+    if (this.queue.length > 0) {
+      const resolve = this.queue.shift();
+      resolve();
+    } else {
+      this.locked = false;
+    }
+  }
+}
+
+const cookieSelectionLock = new AsyncLock();
+
+// ═══════════════════════════════════════════════════════════
+// Cookie Selection with Mutex Lock (Thread-Safe)
+// ═══════════════════════════════════════════════════════════
 async function selectCookie(strategy = 'round-robin', excludeRegion = null) {
+  // ACQUIRE LOCK - ensures only one thread selects at a time
+  await cookieSelectionLock.acquire();
+  
+  try {
   // Reload cookies from database if cache is stale (every 5 seconds)
   // This ensures we pick up deleted/added/updated cookies without restarting
   const now = Date.now();
@@ -592,6 +651,11 @@ async function selectCookie(strategy = 'round-robin', excludeRegion = null) {
   );
 
   return selected;
+  
+  } finally {
+    // RELEASE LOCK - allow next cookie selection
+    cookieSelectionLock.release();
+  }
 }
 
 // Record cookie error and FREE cookie
@@ -1533,9 +1597,22 @@ async function askLMArenaStreaming(
 
   // Prepare request configuration (browser-identical headers)
   const isContinuation = !!existingSessionId;
-  const requestUrl = isContinuation
-    ? `https://lmarena.ai/nextjs-api/stream/post-to-evaluation/${sessionId}`
-    : 'https://lmarena.ai/nextjs-api/stream/create-evaluation';
+  
+  // Use AWS proxy if configured, otherwise direct to lmarena.ai
+  let requestUrl;
+  if (AWS_PROXY_URL) {
+    // Route through AWS API Gateway for IP rotation
+    const lmarenaPath = isContinuation
+      ? `/nextjs-api/stream/post-to-evaluation/${sessionId}`
+      : '/nextjs-api/stream/create-evaluation';
+    requestUrl = `${AWS_PROXY_URL}${lmarenaPath}`;
+  } else {
+    // Direct connection to lmarena.ai
+    requestUrl = isContinuation
+      ? `https://lmarena.ai/nextjs-api/stream/post-to-evaluation/${sessionId}`
+      : 'https://lmarena.ai/nextjs-api/stream/create-evaluation';
+  }
+  
   let requestConfig = {
     headers: {
       'Content-Type': 'text/plain;charset=UTF-8',
@@ -1582,6 +1659,9 @@ async function askLMArenaStreaming(
     timeout: 0, // No socket timeout
     scheduling: 'fifo',
   });
+
+  console.log(`📍 Request URL: ${requestUrl}`);
+  console.log(`   Using ${AWS_PROXY_URL ? 'AWS Proxy' : 'Direct Connection'}`);
 
   try {
     const response = await axios.post(requestUrl, payloadString, requestConfig);
@@ -2522,14 +2602,33 @@ async function askLMArena(modelId, message, retryCount = 0, isIterationRequest =
   });
 
   try {
+    // Use AWS proxy if configured, otherwise direct to lmarena.ai
+    const createEvalPath = '/nextjs-api/stream/create-evaluation';
+    const createEvalUrl = AWS_PROXY_URL 
+      ? `${AWS_PROXY_URL}${createEvalPath}`
+      : `https://lmarena.ai${createEvalPath}`;
+    
+    
+    console.log(`🔍 DEBUG AWS_PROXY_URL:`, AWS_PROXY_URL);
+    console.log(`   Type:`, typeof AWS_PROXY_URL);
+    console.log(`   Boolean:`, !!AWS_PROXY_URL);
+    console.log(`📍 Request URL: ${createEvalUrl}`);
+    console.log(`   Using ${AWS_PROXY_URL ? 'AWS Proxy' : 'Direct Connection'}`);
+    
     const response = await axios.post(
-      'https://lmarena.ai/nextjs-api/stream/create-evaluation',
+      createEvalUrl,
       JSON.stringify(payload),
       requestConfig,
     );
 
+    console.log(`📊 Response status: ${response.status} ${response.statusText || ''}`);
+    console.log(`   Rate limit remaining: ${response.headers['ratelimit-remaining'] || 'N/A'}`);
+
     // Explicit 429 handling on resolved responses (axios does not throw for <500)
     if (response.status === 429) {
+      console.log(`⚠️  Got 429 from ${AWS_PROXY_URL ? 'AWS proxy' : 'LMArena direct'}`);
+      console.log(`   Response headers:`, response.headers);
+      
       // Inform pacer about 429
       if (typeof RATE_PACER !== 'undefined' && RATE_PACER.on429) {
         RATE_PACER.on429(modelId, selectedCookie.region, response.headers);
