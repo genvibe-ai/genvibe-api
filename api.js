@@ -2741,11 +2741,12 @@ async function askLMArena(modelId, message, retryCount = 0, isIterationRequest =
   } finally {
     // ═══════════════════════════════════════════════════════════
     // CRITICAL: ALWAYS free the cookie, even on errors
+    // Only if not already freed by recordCookieSuccess/Error
     // ═══════════════════════════════════════════════════════════
-    if (selectedCookie && selectedCookie.region) {
+    if (selectedCookie && selectedCookie.region && inFlightCookies.has(selectedCookie.region)) {
       selectedCookie.inFlight = Math.max((selectedCookie.inFlight || 1) - 1, 0);
       inFlightCookies.delete(selectedCookie.region);
-      console.log(`✅ Cookie ${selectedCookie.region} freed | In-flight now: ${inFlightCookies.size} cookies`);
+      console.log(`✅ Cookie ${selectedCookie.region} freed (finally) | In-flight now: ${inFlightCookies.size} cookies`);
     }
   }
 }
