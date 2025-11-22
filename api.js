@@ -2601,6 +2601,9 @@ async function askLMArena(modelId, message, retryCount = 0, isIterationRequest =
     scheduling: 'fifo',
   });
 
+  // ═══════════════════════════════════════════════════════════
+  // TRY/FINALLY: Ensure cookie is ALWAYS freed
+  // ═══════════════════════════════════════════════════════════
   try {
     // Use AWS proxy if configured, otherwise direct to lmarena.ai
     const createEvalPath = '/nextjs-api/stream/create-evaluation';
@@ -2735,6 +2738,15 @@ async function askLMArena(modelId, message, retryCount = 0, isIterationRequest =
     }
 
     throw error;
+  } finally {
+    // ═══════════════════════════════════════════════════════════
+    // CRITICAL: ALWAYS free the cookie, even on errors
+    // ═══════════════════════════════════════════════════════════
+    if (selectedCookie && selectedCookie.region) {
+      selectedCookie.inFlight = Math.max((selectedCookie.inFlight || 1) - 1, 0);
+      inFlightCookies.delete(selectedCookie.region);
+      console.log(`✅ Cookie ${selectedCookie.region} freed | In-flight now: ${inFlightCookies.size} cookies`);
+    }
   }
 }
 
