@@ -34,9 +34,7 @@ const CONFIG = {
   // ═══ REQUEST QUEUE CONFIGURATION ═══
   queue: {
     enabled: true, // Enable request queuing for production stability
-    maxConcurrent: 20, // STARTUP DEFAULT - gets replaced by (active cookie count) in lines 109-121 & 511-525
-    minConcurrent: 5, // Minimum concurrent requests (safety floor)
-    maxConcurrentLimit: 500, // Maximum concurrent requests (safety ceiling)
+    maxConcurrent: parseInt(process.env.MAX_CONCURRENT || '20'), // 20 concurrent = 20 cookies × 20 unique IPs (optimal!)
     timeout: 900000, // 15 minutes queue timeout (was 2 min - too short for long streams!)
     streamingTimeout: 1800000, // 30 minutes for streaming requests (very long AI responses)
     throwOnTimeout: false, // Don't throw errors on timeout, just drop the request
@@ -109,23 +107,12 @@ async function loadCookiesFromDB() {
 const cookiesLoaded = (async () => {
   CONFIG.cookies = await loadCookiesFromDB();
   
-  // ═══ DYNAMIC CONCURRENCY: Set maxConcurrent = number of active cookies ═══
-  const activeCookieCount = CONFIG.cookies.filter(c => c.active).length;
-  const dynamicConcurrent = Math.max(
-    CONFIG.queue.minConcurrent,
-    Math.min(activeCookieCount, CONFIG.queue.maxConcurrentLimit)
-  );
-  
-  CONFIG.queue.maxConcurrent = dynamicConcurrent;
-  requestQueue.concurrency = dynamicConcurrent; // Update live queue
-  
   if (CONFIG.cookies.length === 0) {
     console.warn(
       `⚠️  No cookies found in database! Please add cookies via dashboard at http://localhost:${CONFIG.port}/dashboard`,
     );
   } else {
-    console.log(`✅ Loaded ${CONFIG.cookies.length} cookies from database (${activeCookieCount} active)`);
-    console.log(`🔄 Dynamic Concurrency: ${dynamicConcurrent} (based on ${activeCookieCount} active cookies)`);
+    console.log(`✅ Loaded ${CONFIG.cookies.length} cookies from database`);
     CONFIG.cookies.forEach((c) => {
       console.log(`   - ${c.region}: ${c.requestCount} requests, ${c.successRate.toFixed(1)}% success`);
     });
@@ -511,19 +498,6 @@ async function selectCookie(strategy = 'round-robin', excludeRegion = null) {
   if (now - cookiesLastLoaded > COOKIE_RELOAD_INTERVAL) {
     CONFIG.cookies = await loadCookiesFromDB();
     cookiesLastLoaded = now;
-    
-    // ═══ UPDATE DYNAMIC CONCURRENCY when cookies change ═══
-    const activeCookieCount = CONFIG.cookies.filter(c => c.active).length;
-    const dynamicConcurrent = Math.max(
-      CONFIG.queue.minConcurrent,
-      Math.min(activeCookieCount, CONFIG.queue.maxConcurrentLimit)
-    );
-    
-    if (CONFIG.queue.maxConcurrent !== dynamicConcurrent) {
-      CONFIG.queue.maxConcurrent = dynamicConcurrent;
-      requestQueue.concurrency = dynamicConcurrent;
-      console.log(`🔄 Updated concurrency: ${dynamicConcurrent} (${activeCookieCount} active cookies)`);
-    }
   }
 
   const activeCookies = CONFIG.cookies.filter((c) => c.active && c.cookie.length > 0);
@@ -1560,16 +1534,16 @@ async function askLMArenaStreaming(
   // Prepare request configuration (browser-identical headers)
   const isContinuation = !!existingSessionId;
   const requestUrl = isContinuation
-    ? `https://pp4e7obm4b.execute-api.us-east-1.amazonaws.com/nextjs-api/stream/post-to-evaluation/${sessionId}`
-    : 'https://pp4e7obm4b.execute-api.us-east-1.amazonaws.com/nextjs-api/stream/create-evaluation';
+    ? `https://lmarena.ai/nextjs-api/stream/post-to-evaluation/${sessionId}`
+    : 'https://lmarena.ai/nextjs-api/stream/create-evaluation';
   let requestConfig = {
     headers: {
       'Content-Type': 'text/plain;charset=UTF-8',
       Accept: '*/*',
       'Accept-Encoding': 'gzip, deflate, br, zstd',
       'Accept-Language': 'en-US,en;q=0.9',
-      Origin: 'https://pp4e7obm4b.execute-api.us-east-1.amazonaws.com',
-      Referer: isContinuation ? `https://pp4e7obm4b.execute-api.us-east-1.amazonaws.com/c/${sessionId}` : 'https://pp4e7obm4b.execute-api.us-east-1.amazonaws.com/?mode=direct',
+      Origin: 'https://lmarena.ai',
+      Referer: isContinuation ? `https://lmarena.ai/c/${sessionId}` : 'https://lmarena.ai/?mode=direct',
       'Sec-Fetch-Dest': 'empty',
       'Sec-Fetch-Mode': 'cors',
       'Sec-Fetch-Site': 'same-origin',
@@ -2472,8 +2446,8 @@ async function askLMArena(modelId, message, retryCount = 0, isIterationRequest =
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
       Accept: '*/*',
       'Accept-Language': 'en-US,en;q=0.9',
-      Origin: 'https://pp4e7obm4b.execute-api.us-east-1.amazonaws.com',
-      Referer: 'https://pp4e7obm4b.execute-api.us-east-1.amazonaws.com/?mode=direct',
+      Origin: 'https://lmarena.ai',
+      Referer: 'https://lmarena.ai/?mode=direct',
 
       // Cloudflare checks these headers
       'Sec-Fetch-Dest': 'empty',
@@ -2505,13 +2479,13 @@ async function askLMArena(modelId, message, retryCount = 0, isIterationRequest =
 
   // Preflight for non-streaming: avoid starting request if Cloudflare challenge
   try {
-    const pre = await axios.get('https://pp4e7obm4b.execute-api.us-east-1.amazonaws.com/', {
+    const pre = await axios.get('https://lmarena.ai/', {
       headers: {
         'User-Agent': requestConfig.headers['User-Agent'],
         Accept: '*/*',
         'Accept-Language': 'en-US,en;q=0.9',
-        Referer: 'https://pp4e7obm4b.execute-api.us-east-1.amazonaws.com/?mode=direct',
-        Origin: 'https://pp4e7obm4b.execute-api.us-east-1.amazonaws.com',
+        Referer: 'https://lmarena.ai/?mode=direct',
+        Origin: 'https://lmarena.ai',
         'Sec-Fetch-Dest': 'document',
         'Sec-Fetch-Mode': 'navigate',
         'Sec-Fetch-Site': 'same-origin',
@@ -2549,7 +2523,7 @@ async function askLMArena(modelId, message, retryCount = 0, isIterationRequest =
 
   try {
     const response = await axios.post(
-      'https://pp4e7obm4b.execute-api.us-east-1.amazonaws.com/nextjs-api/stream/create-evaluation',
+      'https://lmarena.ai/nextjs-api/stream/create-evaluation',
       JSON.stringify(payload),
       requestConfig,
     );
@@ -3515,8 +3489,8 @@ try {
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
     Accept: '*/*',
     'Accept-Language': 'en-US,en;q=0.9',
-    Referer: 'https://pp4e7obm4b.execute-api.us-east-1.amazonaws.com/?mode=direct',
-    Origin: 'https://pp4e7obm4b.execute-api.us-east-1.amazonaws.com',
+    Referer: 'https://lmarena.ai/?mode=direct',
+    Origin: 'https://lmarena.ai',
     'Sec-Fetch-Dest': 'document',
     'Sec-Fetch-Mode': 'navigate',
     'Sec-Fetch-Site': 'same-origin',
@@ -3525,7 +3499,7 @@ try {
     Cookie: selectedCookie.cookie,
     Connection: 'keep-alive',
   };
-  const pre = await axios.get('https://pp4e7obm4b.execute-api.us-east-1.amazonaws.com/', {
+  const pre = await axios.get('https://lmarena.ai/', {
     headers: preHeaders,
     maxRedirects: 0,
     validateStatus: (s) => s < 500,
